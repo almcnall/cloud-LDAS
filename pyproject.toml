@@ -1,0 +1,18 @@
+[project]
+name = "cloud-LDAS"
+version = "0.1.0"
+description = "FLDAS and NLDAS Cloud Storage Benchmarking"
+requires-python = ">=3.11"
+dependencies = [
+  "dask[complete]>=2025.4.0",
+  "earthaccess>=0.14.0",
+  "fsspec>=2025.3.2",
+  "h5netcdf>=1.6.2",
+  "kerchunk>=0.2.8",
+  "msgspec>=0.19.0",
+  "xarray>=2025.3.1",
+]
+
+[tool.jupytext.formats]
+"notebooks/" = "ipynb"
+"scripts/" = "py"

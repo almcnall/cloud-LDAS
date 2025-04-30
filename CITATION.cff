@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "Please cite the article from preferred-citation to reference this code supplement."
+authors:
+  - family-names: McNally
+    given-names: Amy
+  - family-names: Sterzinger
+    given-names: Lucas
+  - family-names: Carroll
+    given-names: Ian
+title: "Producing Earth Science Data for Impact: Improved Commercial Cloud Usability of Archive Model Data (Code Supplement)"
+preferred-citation:
+  authors:
+    - family-names: McNally
+      given-names: Amy
+    - family-names: Sterzinger
+      given-names: Lucas
+    - family-names: Carroll
+      given-names: Ian
+  title: "Producing Earth Science Data for Impact: Improved Commercial Cloud Usability of Archive Model Data"
+  type: article
