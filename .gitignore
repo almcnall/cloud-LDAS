@@ -1,7 +1,5 @@
 __pycache__
 .ipynb_checkpoints
-
 /notebooks
 /data
-/cloud_fews
 /uv.lock

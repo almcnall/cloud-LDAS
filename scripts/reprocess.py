@@ -48,7 +48,7 @@ parser.add_argument(
 parser.add_argument(
     "--prefix",
     default="data",
-    help="the [bucket and] prefix to prepend to 'cloud_fews' for remote storage",
+    help="the [bucket and] prefix to prepend to 'cloud_ldas' for remote storage",
 )
 parser.add_argument(
     "--tempdir",
@@ -64,7 +64,7 @@ args, _ = parser.parse_known_args()
 
 # %%
 storage = fsspec.filesystem(args.remote)
-prefix = Path(args.prefix, "cloud_fews")
+prefix = Path(args.prefix, "cloud_ldas")
 tempdir = TemporaryDirectory().name if args.tempdir else Path("data", "granules")
 exp_dims = ("rechunk", "repack", "kerchunk")
 

@@ -36,13 +36,13 @@ parser.add_argument(
 parser.add_argument(
     "--prefix",
     default="",
-    help="the [bucket and] prefix to prepend to 'cloud_fews' for remote storage"
+    help="the [bucket and] prefix to prepend to 'cloud_ldas' for remote storage"
 )
 args, _ = parser.parse_known_args()
 
 # %%
 storage = fsspec.filesystem(args.remote)
-prefix = Path(args.prefix, "cloud_fews")
+prefix = Path(args.prefix, "cloud_ldas")
 exp_dims = ("rechunk", "repack", "kerchunk")
 
 
