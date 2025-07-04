@@ -19,6 +19,10 @@
 # ## Setup
 
 # %%
+# %pip install msgspec
+
+# %%
+import os
 import argparse
 import subprocess
 from datetime import datetime, timedelta
@@ -36,36 +40,69 @@ from msgspec import json
 
 # %% [markdown]
 # The default values in the `parser` are set for "debugging" while working in the notebook.
-# They will be supplied when running the scripts, see `CONTRIBUTING.md`.
+# The defaults depend on the existence of the `SCRATCH_BUCKET` environment variable, which
+# is defined on the 2i2c JupyterHub and probably not defined locally.
+# "Operational" values are supplied when running the scripts, see `CONTRIBUTING.md`.
+
+# %%
+if "SCRATCH_BUCKET" in os.environ:
+    remote = "s3"
+    prefix = os.environ["SCRATCH_BUCKET"]
+    tempdir = True
+else:
+    remote = "local"
+    prefix = "data"
+    tempdir = False
 
 # %%
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--remote",
-    default="local",
+    default=remote,
     help="the type of filesystem used to store the original and reprocessed files",
 )
 parser.add_argument(
     "--prefix",
-    default="data",
+    default=prefix,
     help="the [bucket and] prefix to prepend to 'cloud_ldas' for remote storage",
 )
 parser.add_argument(
     "--tempdir",
+    default=tempdir,
     action="store_true",
-    help="whether to use a transient temporary directory for downloaded originals",
+    help="whether to use a transient temporary directory for downloads (original granules)",
 )
 parser.add_argument(
     "--count",
     default=2,
-    help="the number of granules to process",
+    help="the number of granules to reprocess, use '-1' for all",
 )
 args, _ = parser.parse_known_args()
 
 # %%
-storage = fsspec.filesystem(args.remote)
-prefix = Path(args.prefix, "cloud_ldas")
-tempdir = TemporaryDirectory().name if args.tempdir else Path("data", "granules")
+if args.remote == "local":
+    storage = fsspec.filesystem(args.remote, auto_mkdir=True)
+else:
+    storage = fsspec.filesystem(args.remote)
+
+# %%
+prefix = Path(args.prefix.removeprefix(f"{args.remote}:/"), "cloud_ldas")
+
+# %% [markdown]
+# A `TemporaryDirectory()` will be deleted when Python exists, which we don't want
+# while developing.
+
+# %%
+if args.tempdir:
+    tempdir = TemporaryDirectory().name
+else:
+    tempdir = Path("data", "granules")
+
+# %% [markdown]
+# The `exp_dims` constant determins the literal dimensions of the xarray.Dataset
+# created to hold timing results for different levels in the three factors of our experiment.
+
+# %%
 exp_dims = ("rechunk", "repack", "kerchunk")
 
 
@@ -91,7 +128,6 @@ def storage_path(array, **kwargs):
         if index is None:
             index = array[item].item()
         path = path / item / str(index)
-    path.mkdir(exist_ok=True, parents=True)
     return str(path / granule["meta"]["concept-id"])
 
 
@@ -112,7 +148,7 @@ def process_get(dataset):
     if not array["rechunk"] and not array["repack"] and not array["kerchunk"]:
         start = datetime.now()
         paths = earthaccess.download([array["granules"].item()], tempdir)
-        storage.put(paths[0], storage_path(array))
+        storage.put(paths, [storage_path(array)])
         stop = datetime.now()
         dataset["time"] = xr.DataArray(stop - start, coords=array.coords)
     return dataset
@@ -242,13 +278,19 @@ def process_multi_kerchunk(dataset, name):
 # %% [markdown]
 # ## Dask Workers
 
-# %%
-# import coiled
+# %% [raw]
+# from dask_gateway import Gateway
 
-# cluster = coiled.Cluster(n_workers=15, region='us-west-2', worker_cpu=2, name='lsterzinger-cloud-optimized-data-tests') #, software='lsterzinger-env')
+# %% [raw]
+# # todo args.workers
+#
+# gateway = Gateway()
+# options = gateway.cluster_options()
+# options
+# cluster = gateway.new_cluster(options)
+# cluster.scale(8)
 # client = cluster.get_client()
-
-# add process bars
+# client
 
 # %% [markdown]
 # ## FLDAS
@@ -388,3 +430,9 @@ time.to_netcdf(f'data/{product["short_name"]}-reprocess-{datetime.now()}.nc')
 
 # %%
 time.astype("timedelta64[s]").astype(int).to_dataframe()
+
+# %% [markdown]
+# ### Shutdown
+
+# %% [raw]
+# cluster.shutdown()

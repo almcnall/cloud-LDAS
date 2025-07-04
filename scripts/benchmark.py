@@ -19,6 +19,7 @@
 # ## Setup
 
 # %%
+import os
 import argparse
 from pathlib import Path
 
@@ -27,22 +28,43 @@ import earthaccess
 import xarray as xr
 
 # %%
+if "SCRATCH_BUCKET" in os.environ:
+    remote = "s3"
+    prefix = os.environ["SCRATCH_BUCKET"]
+    tempdir = True
+else:
+    remote = "local"
+    prefix = "data"
+    tempdir = False
+
+# %%
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--remote",
-    default="local",
+    default=remote,
     help="the type of filesystem used to store the original and reprocessed files",
 )
 parser.add_argument(
     "--prefix",
-    default="",
+    default=prefix,
     help="the [bucket and] prefix to prepend to 'cloud_ldas' for remote storage"
 )
 args, _ = parser.parse_known_args()
 
 # %%
-storage = fsspec.filesystem(args.remote)
-prefix = Path(args.prefix, "cloud_ldas")
+if args.remote == "local":
+    storage = fsspec.filesystem(args.remote, auto_mkdir=True)
+else:
+    storage = fsspec.filesystem(args.remote)
+
+# %%
+prefix = Path(args.prefix.removeprefix(f"{args.remote}:/"), "cloud_ldas")
+
+# %% [markdown]
+# The `exp_dims` constant determins the literal dimensions of the xarray.Dataset
+# created to hold timing results for different levels in the three factors of our experiment.
+
+# %%
 exp_dims = ("rechunk", "repack", "kerchunk")
 
 
@@ -93,20 +115,50 @@ paths = [storage_path(i["meta"]["concept-id"]) for i in granules]
 # 4. write output to dataset that can be combined by coords with open_mfdataset (replicates?)
 
 # %%
-xr.open_dataset(prefix / "rechunk/0/repack/0/kerchunk/0/G2777011867-GES_DISC", engine="h5netcdf")
+storage, prefix
 
-# %% editable=true slideshow={"slide_type": ""}
-xr.open_dataset(
+# %%
+path = prefix / "rechunk/0/repack/0/kerchunk/0/G2777011867-GES_DISC"
+with storage.open(path) as fo:
+    ds = xr.open_dataset(fo, engine="h5netcdf")
+
+# %%
+path = prefix / "rechunk/0/repack/0/kerchunk/0/G2777011867-GES_DISC"
+path = prefix / "rechunk/1/repack/1/kerchunk/1/G2777011879-GES_DISC"
+storage.cat(str(prefix / path))
+
+# %%
+path = prefix / "rechunk/0/repack/0/kerchunk/1/G2777011879-GES_DISC"
+ds = xr.open_dataset(
     "reference://",
     engine="zarr",
     backend_kwargs={
         "consolidated": False,
         "storage_options": {
-            "fo": str(prefix / "rechunk/1/repack/1/kerchunk/1/G2777011879-GES_DISC"),
+            "fo": str(path),
+            "target_protocol": args.remote,
             "remote_protocol": args.remote,
         },
     },
     chunks={},
 )
+
+# %% editable=true slideshow={"slide_type": ""}
+with storage.open(path) as fo:
+    ds = xr.open_dataset(
+        "reference://",
+        engine="zarr",
+        backend_kwargs={
+            "consolidated": False,
+            "storage_options": {
+                "fo": fo, # HERE a str but give target_options?
+                "remote_protocol": args.remote,
+            },
+        },
+        chunks={},
+    )
+
+# %%
+# %debug
 
 # %%
