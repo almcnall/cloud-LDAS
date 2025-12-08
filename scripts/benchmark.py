@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.17.2
+#       jupytext_version: 1.17.3
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -28,26 +28,19 @@ import earthaccess
 import xarray as xr
 
 # %%
-if "SCRATCH_BUCKET" in os.environ:
-    remote = "s3"
-    prefix = os.environ["SCRATCH_BUCKET"]
-    tempdir = True
-else:
-    remote = "local"
-    prefix = "data"
-    tempdir = False
+exp_dims = ("rechunk", "repack", "kerchunk")
 
 # %%
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--remote",
-    default=remote,
+    default="s3" if "SCRATCH_BUCKET" in os.environ else "local",
     help="the type of filesystem used to store the original and reprocessed files",
 )
 parser.add_argument(
     "--prefix",
-    default=prefix,
-    help="the [bucket and] prefix to prepend to 'cloud_ldas' for remote storage"
+    default=os.environ.get("SCRATCH_BUCKET", "data"),
+    help="the [bucket and] prefix to prepend to 'cloud_ldas' for remote storage",
 )
 args, _ = parser.parse_known_args()
 
@@ -58,14 +51,7 @@ else:
     storage = fsspec.filesystem(args.remote)
 
 # %%
-prefix = Path(args.prefix.removeprefix(f"{args.remote}:/"), "cloud_ldas")
-
-# %% [markdown]
-# The `exp_dims` constant determins the literal dimensions of the xarray.Dataset
-# created to hold timing results for different levels in the three factors of our experiment.
-
-# %%
-exp_dims = ("rechunk", "repack", "kerchunk")
+prefix = Path(args.prefix.removeprefix(f"{args.remote}://"), "cloud_ldas")
 
 
 # %%
@@ -85,6 +71,9 @@ def open_dataset(dataset, name):
     return zs    
 
 
+# %%
+storage.glob(str(prefix / "C*"))
+
 # %% [markdown]
 # ## FLDAS
 
@@ -92,12 +81,17 @@ def open_dataset(dataset, name):
 # ### File List
 
 # %%
-product = {
-    "short_name": "FLDAS_NOAHMP001_G_CA_D",
-    "version": "001",
-    "temporal": ("2023-02-01", "2023-02-28"),
-}
-granules = earthaccess.search_data(**product, cloud_hosted=True)
+fs = fsspec.filesystem("local")
+fs.glob("*.ipynb")
+
+# %%
+storage.glob('/openscapeshub-scratch/itcarroll/cloud_ldas/C2773858780-GES_DISC/**/G*')
+
+# %%
+str(prefix)
+
+# %%
+storage.glob(str(prefix) + "/**/G*")
 
 # %%
 paths = [storage_path(i["meta"]["concept-id"]) for i in granules]
@@ -143,7 +137,7 @@ ds = xr.open_dataset(
     chunks={},
 )
 
-# %% editable=true slideshow={"slide_type": ""}
+# %% slideshow={"slide_type": ""} editable=true
 with storage.open(path) as fo:
     ds = xr.open_dataset(
         "reference://",

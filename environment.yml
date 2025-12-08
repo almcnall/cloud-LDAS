@@ -1,5 +1,15 @@
+channels:
+  - conda-forge
 dependencies:
-  - python==3.11
-  - uv
+  - dask
+  - earthaccess
+  - fsspec
+  - h5netcdf
+  - ipykernel
+  - ipywidgets
+  - kerchunk
   - libnetcdf
-  - hdf5
+  - msgspec
+  - xarray
+platforms:
+  - linux-64

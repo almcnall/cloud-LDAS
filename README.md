@@ -1,22 +1,34 @@
-# FLDAS and NLDAS Cloud Storage Benchmarking
+# Producing Earth Science Data for Impact: Improved Commercial Cloud Usability of Archive Model Data
 
-## Overview
+Welcome to the article supplement for McNally et al. (submitted), which introduces concepts, challenges, and solutions for analysis of Earth System Model archive data in cloud computing environments.
 
-### Reprocess Data Files
+## TODO: Supplementary Text Section
 
-The `reprocess` script implements cloud optimization strategies:
+## Repository Overview
 
-- Enlarge "chunks" to a size better for cloud object stores
-- Move the internal data on file structure into distinct "pages"
-- Copy the internal data on file structure to external "sidecar" files
+The "scripts" folder provides everything needed to reproduce the case study,
+as described in the folder's README.
 
-### Benchmark Zonal Statistics against Local Storage
+The "CONTRIBUTING.md" guide provides instructions for project collaborators,
+or any potential contributors to this repository.
+It includes documentation on developing and testing in Jupyter notebooks.
 
-The `benchmark` script opens original and reprocessed files to calculate a zonal statistic.
+The README in "scripts" and the contributing guide are executable [MyST Markdown] documents,
+with bash as the designated kernel.
+If not already available, install this light-weight kernel and kernelspec in your user directory as follows.
 
-## Contributing
+```shell
+pip install --user bash_kernel
+python -m bash_kernel.install
+```
 
-The `CONTRIBUTING.md` file provides setup instructions and shell commands to reproduce the data included in the associated publication.
+With the [Jupytext] extension available in JupyterLab, execution of MyST Markdown code cells is like execution of Notebook code cells.
+The difference is that outputs are note saved in a MyST Markdown file.
+Open any MyST Markdown as a Notebook (use right-click > "Open With" > "Notebook") to run its code cells.
 
 ## Acknowledgments
 
+Please see the associated publication.
+
+[MyST Markdown]: https://mystmd.org/
+[Jupytext]: https://jupytext.readthedocs.io/
