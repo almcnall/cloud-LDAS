@@ -26,41 +26,44 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
-
 import earthaccess
 import fsspec
 import xarray as xr
+import requests
 from dask.diagnostics import ProgressBar
 from kerchunk.combine import MultiZarrToZarr
 from kerchunk.hdf import SingleHdf5ToZarr
 from msgspec import json
 
 # %% [markdown]
-# ### Define Arguments
+# ### Command Line Arguments
 
 # %% [markdown]
-# The default values set for the `argparse.ArgumentParser` are intended for development work,
-# and should be set explicitly when running scripts for the full experiment.
+# Operational values can be supplied as needed when running the scripts (see "scripts/README.md").
 #
-# The defaults depend on the existence of the `SCRATCH_BUCKET` environment variable, which
-# is defined on the 2i2c JupyterHub and probably not defined locally.
-# "Operational" values are supplied when running the scripts (see `CONTRIBUTING.md`).
+# Default settings are intended for development and testing,
+# and depend on the existence of the `SCRATCH_BUCKET` environment variable,
+# which is defined on the 2i2c JupyterHub and probably not defined locally.
+
+# %%
+in_cloud = "SCRATCH_BUCKET" in os.environ
+in_cloud
 
 # %%
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--remote",
-    default="s3" if "SCRATCH_BUCKET" in os.environ else "local",
+    default="s3" if in_cloud else "local",
     help="type of storage used for reprocessed files and copies of the original",
 )
 parser.add_argument(
     "--prefix",
-    default=os.environ.get("SCRATCH_BUCKET", "data").removeprefix("s3://"),
+    default=os.environ["SCRATCH_BUCKET"].removeprefix("s3://") if in_cloud else "data",
     help="the prefix to prepend to 'cloud_ldas' for remote storage",
 )
 parser.add_argument(
-    "--tempdir",
-    default="SCRATCH_BUCKET" in os.environ,
+    "--tmpdir",
+    default=in_cloud,
     action="store_true",
     help="whether to use a transient temporary directory for downloads (original files)",
 )
@@ -70,6 +73,7 @@ parser.add_argument(
     help="the number of files to reprocess, use '-1' for all",
 )
 args, _ = parser.parse_known_args()
+args
 
 # %% [markdown]
 # ### File handling
@@ -96,41 +100,44 @@ prefix
 # while developing.
 
 # %%
-if args.tempdir:
-    tempdir = TemporaryDirectory().name
+if args.tmpdir:
+    tmpdir = TemporaryDirectory().name
 else:
-    tempdir = Path("tmp")
-tempdir
+    tmpdir = Path("tmp")
+tmpdir
 
 
 # %%
-def storage_path(array, **kwargs):
+def storage_path(dataset, **kwargs):
     """Build a path, starting from `prefix`, for outputs.
 
     The array, which must have a size of one, will also have coordinates used to
     construct the output path for the processed granule. The resulting path looks
-    like "prefix/rechunk/[0|1]/repack/[0|1]/kerchunk/[0|1]/concept-id"
+    like "prefix/<product>/<rechunk>/<repack>/<kerchunk>/<file>".
 
     Parameters
     ----------
-    array :
-        the size-one chunk of the array used to distribute processing
-    kwargs :
+    dataset : xarray.Dataset
+        the size-one chunk of the dataset used to distribute processing
+    kwargs
         override the array's coordinate value for the given keyword
+
+    Returns
+    -------
+    str
+        a absolute path to use for storage of outputs
     """
-    granule = array["files"].item()
-    meta = granule["meta"]
-    path = prefix / meta["collection-concept-id"]
-    for item in ("rechunk", "repack", "kerchunk"):
+    path = prefix
+    for item in ("product", "rechunk", "repack", "kerchunk", "file"):
         index = kwargs.get(item)
         if index is None:
-            index = array[item].item()
-        path = path / item / str(index)
-    return str(path / meta["concept-id"])
+            index = dataset[item].item()
+        path = path / str(index)
+    return path
 
 
 # %% [markdown]
-# ### Core Functions
+# ### Reprocessing Functions
 
 # %% [markdown]
 # #### get
@@ -145,14 +152,19 @@ def process_get(dataset):
 
     Parameters
     ----------
-    dataset :
-        the size-one chunked dataset used to distribute processing
+    dataset : xarray.Dataset
+        the size-one chunk of the dataset used to distribute processing
+
+    Returns
+    -------
+    xarray.Dataset
+        the processing time, with coordinates as for `dataset`
     """
-    array = dataset["time"]
+    dst_path = storage_path(dataset)
     start = datetime.now()
-    paths = earthaccess.download([array["files"].item()], tempdir, show_progress=False)
-    storage.put(paths, [storage_path(array)])
+    paths = earthaccess.download([dataset["results"].item()], tmpdir, show_progress=False)
     stop = datetime.now()
+    storage.put_file(paths[0], dst_path)
     dataset["time"][...] = stop - start
     return dataset
 
@@ -164,26 +176,33 @@ def process_get(dataset):
 def process_rechunk(dataset):
     """Fetch a granule from storage, rechunk, and push back.
 
-    Downloads a granule onto the local filesystem, executes rechunking
-    with `nccopy`, and pushes the result to storage.
+    Copies an object from storage into a temporary file,
+    executes rechunking with `nccopy`, and moves the result to storage.
+
 
     Parameters
     ----------
-    dataset :
+    dataset : xarray.Dataset
+        see `process_get`
+
+    Returns
+    -------
+    xarray.Dataset
         see `process_get`
     """
-    start = datetime.now()
-    array = dataset["time"]
-    # HERE
-    if array["rechunk"] and not array["repack"] and not array["kerchunk"]:
-        chunks = dataset["chunks"].item()
-        with NamedTemporaryFile(suffix=".nc") as src:
-            with NamedTemporaryFile(suffix=".nc") as dst:
-                storage.get(storage_path(array, rechunk=0), src.name)
-                subprocess.run(["nccopy", "-w", "-c", chunks, src.name, dst.name])
-                storage.put(dst.name, storage_path(array))
-    stop = datetime.now()
-    dataset["time"] = xr.DataArray(stop - start, coords=array.coords)
+    dst_path = storage_path(dataset)
+    src_path = storage_path(dataset, rechunk=0)
+    if not storage.exists(src_path):
+        return dataset
+    chunk_size = dataset["chunk_size"].item()
+    with NamedTemporaryFile(suffix=".nc") as src:
+        with NamedTemporaryFile(suffix=".nc") as dst:
+            storage.get_file(src_path, src.name)
+            start = datetime.now()
+            subprocess.run(["nccopy", "-w", "-c", chunk_size, src.name, dst.name])
+            stop = datetime.now()
+            storage.put_file(dst.name, dst_path)
+    dataset["time"][...] = stop - start
     return dataset
 
 
@@ -194,27 +213,34 @@ def process_rechunk(dataset):
 def process_repack(dataset):
     """Fetch a granule from storage, repack, and push back.
 
-    Downloads a granule onto the local filesystem, executes repacking
-    with `h5repack`, and pushes the result to storage.
+    Copies an object from storage into a temporary file,
+    executes repacking with `h5repack`, and moves the result to storage.
 
     Parameters
     ----------
-    dataset :
+    dataset : xarray.Dataset
+        see `process_get`
+
+    Returns
+    -------
+    xarray.Dataset
         see `process_get`
     """
-    start = datetime.now()
-    array = dataset["time"]
-    if array["repack"] and not array["kerchunk"]:
-        page_size = dataset["page_size"].item()
-        with NamedTemporaryFile(suffix=".nc") as src:
-            with NamedTemporaryFile(suffix=".nc") as dst:
-                storage.get(storage_path(array, repack=0), src.name)
-                subprocess.run(
-                    ["h5repack", "-S", "PAGE", "-G", page_size, src.name, dst.name],
-                )
-                storage.put(dst.name, storage_path(array))
-                stop = datetime.now()
-                dataset["time"] = xr.DataArray(stop - start, coords=array.coords)
+    dst_path = storage_path(dataset)
+    src_path = storage_path(dataset, repack=0)
+    if not storage.exists(src_path):
+        return dataset
+    page_size = dataset["page_size"].item()
+    with NamedTemporaryFile(suffix=".nc") as src:
+        with NamedTemporaryFile(suffix=".nc") as dst:
+            storage.get_file(src_path, src.name)
+            start = datetime.now()
+            subprocess.run(
+                ["h5repack", "-S", "PAGE", "-G", page_size, src.name, dst.name],
+            )
+            stop = datetime.now()
+            storage.put_file(dst.name, dst_path)
+    dataset["time"][...] = stop - start
     return dataset
 
 
@@ -223,94 +249,152 @@ def process_repack(dataset):
 
 # %%
 def process_single_kerchunk(dataset):
-    """Fetch a granule from storage, repack, and push back.
+    """Kerchunk a single file in storage and push sidecar to storage.
 
-    Executes kerchunking on a single granule in storage and writes the result to storage.
+    Execute kerchunking on a single object in storage,
+    and write the resulting sidecar file to storage.
 
     Parameters
     ----------
-    dataset :
+    dataset : xarray.Dataset
+        see `process_get`
+
+    Returns
+    -------
+    xarray.Dataset
         see `process_get`
     """
+    dst_path = storage_path(dataset)
+    src_path = storage_path(dataset, kerchunk=0)
+    if not storage.exists(src_path):
+        return dataset
     start = datetime.now()
-    array = dataset["time"]
-    if array["kerchunk"]:
-        path = storage_path(array, kerchunk=0)
-        with storage.open(path) as src:
-            reference = SingleHdf5ToZarr(src, path)
-            reference = reference.translate()
-            with storage.open(storage_path(array), "wb") as dst:
-                dst.write(json.encode(reference))
-        stop = datetime.now()
-        dataset["time"] = xr.DataArray(stop - start, coords=array.coords)
+    with storage.open(src_path) as src:
+        reference = SingleHdf5ToZarr(src, str(src_path)).translate()
+    with storage.open(dst_path, "wb") as dst:
+        dst.write(json.encode(reference))
+    stop = datetime.now()
+    dataset["time"][...] = stop - start
     return dataset
 
 
 # %%
-def process_multi_kerchunk(dataset, name):
-    """Fetch a granule from storage, repack, and push back.
+def process_multi_kerchunk(dataset):
+    """Combine sidecar files, and push merged sidecar to storage.
 
-    Executes kerchunking on a single granule in storage and writes the result to storage.
+    Load the sidecar files for each file from storage, merge them,
+    and write the resulting sidecar file into storage.
 
     Parameters
     ----------
-    dataset :
+    dataset : xarray.Dataset
+        the chunk of the dataset used to distribute processing with the entire
+        "file" dimension in one chunk
+
+    Returns
+    -------
+    xarray.Dataset
         see `process_get`
     """
+    dst_path = storage_path(dataset, file=dataset["product"].item())
+    src_path = storage.glob(str(dst_path.parent / "G*"))
+    if not src_path:
+        return dataset
     start = datetime.now()
-    stop = start
-    array = dataset["time"]
-    if array["kerchunk"]:
-        dicts = []
-        for item in array:
-            path = storage_path(item)
-            reference = storage.cat(path)
-            dicts.append(json.decode(reference))
-        reference = MultiZarrToZarr(
-            dicts,
-            remote_protocol=args.remote,
-            concat_dims="time",
-        )
-        reference = reference.translate()
-        path = str(Path(path).parent / name)
-        with storage.open(path, "wb") as dst:
-            dst.write(json.encode(reference))
-        stop = datetime.now()
-    return xr.DataArray(stop - start, coords=dataset.drop_dims("files").coords)
+    reference = MultiZarrToZarr(
+        [json.decode(storage.cat(i)) for i in src_path],
+        remote_protocol=args.remote,
+        concat_dims="time",
+    )
+    reference = reference.translate()
+    with storage.open(dst_path, "wb") as dst:
+        dst.write(json.encode(reference))
+    stop = datetime.now()
+    dataset["time"][...] = stop - start
+    return dataset
 
 
 # %% [markdown]
-# ## FLDAS
+# ## Reprocessing
 
 # %% [markdown]
-# ### File List
+# ### Data & Parameters
+
+# %% [markdown]
+# Define the datat to be reprocessed, and the needed reprocessing parameters, in a dictionary.
 
 # %%
-product = {
-    "short_name": "FLDAS_NOAHMP001_G_CA_D",
-    "version": "001",
-    "temporal": ("2023-02-01", "2023-02-28"),
-}
-results = earthaccess.search_data(**product, count=args.count)
-ds = xr.Dataset(
-    {
-        "time": xr.DataArray(
-            float('nan'),
-            coords=[
-                ("files", results),
-                ("rechunk", [0, 1]),
-                ("repack", [0, 1]),
-                ("kerchunk", [0, 1]),
-            ],
-        ),
-        "chunks": ((), "time/1,lat/350,lon/700"),
+products = {
+    "FLDAS_NOAHMP001_G_CA_D": {
+        "query": {
+            "version": "001",
+            "temporal": ("2023-02-01", "2023-02-28"),
+        },
+        "chunk_size": ((), "time/1,lat/350,lon/700"),
         "page_size": ("rechunk", ["6291456", "524288"]),
-    }
-)
-ds
+    },
+    "NLDAS_NOAH0125_H": {
+        "query": {
+            "version": "2.0",
+            "temporal": ("2023-02-01", "2023-02-28"),
+        },
+        "page_size": ((), "419430"),
+    },
+}
 
 # %% [markdown]
-# ### Execute Reprocessing
+# Build an xarray.Dataset that embeds the experimental design in its dimensions (factors) and coordinates (levels).
+# The `dataset` will hold timing results for the reprocessing steps.
+
+# %%
+earthaccess.login()
+dataset = []
+for key, value in products.items():
+    results = earthaccess.search_data(
+        count=int(args.count),
+        short_name=key,
+        **value["query"],
+    )
+    ds = xr.Dataset(
+        {
+            "results": ("file", results),
+            "page_size": value["page_size"],
+        },
+        coords={
+            "file": ("file", [i["meta"]["concept-id"] for i in results]),
+            "product": ("file", [key] * len(results)),
+        },
+    )
+    da = xr.DataArray(
+        float('nan'),
+        coords=[
+            ("repack", [0, 1]),
+            ("kerchunk", [0, 1]),
+        ],
+    )
+    da = da.astype("timedelta64[ns]")
+    if "chunk_size" in value:
+        da = da.expand_dims({"rechunk": [0, 1]})
+        ds["chunk_size"] = value["chunk_size"]
+    ds["time"] = da
+    dataset.append(ds)
+dataset = xr.concat(dataset, dim="file", data_vars="all")
+dataset
+
+# %% [markdown]
+# ### Execute
+
+# %%
+# TODO: workaround for https://github.com/nsidc/earthaccess/issues/1136
+auth = earthaccess.login()
+endpoint = "https://data.gesdisc.earthdata.nasa.gov/s3credentials"
+earthaccess.__store__._s3_credentials[(None, None, endpoint)] = (
+    datetime.now(),
+    auth.get_s3_credentials(endpoint=endpoint)
+)
+
+# %% [markdown]
+# In each cell, a selection of the dataset is created and chunked before submitting to Dask workers for a reprocessing step.
 
 # %%
 levels = {
@@ -318,113 +402,67 @@ levels = {
     "repack": [0],
     "kerchunk": [0],
 }
-out = ds.sel(levels).chunk(1)
+ds = dataset.sel(levels).chunk(1)
+print("process_get")
 with ProgressBar():
-    out = out.map_blocks(process_get, template=out).compute()
-ds = xr.merge((ds, out), join="outer", compat="no_conflicts")
+    ds = ds.map_blocks(process_get, template=ds).compute()
+dataset = xr.merge((dataset, ds), join="outer", compat="no_conflicts")
 
 # %%
-
-# %%
-
-# %%
-ds = ds.chunk(1)
-ds = ds.map_blocks(process_rechunk, template=ds).compute()
-
-# %%
-ds = ds.chunk(1)
-ds = ds.map_blocks(process_repack, template=ds).compute()
-
-# %%
-ds = ds.chunk(1)
-ds = ds.map_blocks(process_single_kerchunk, template=ds).compute()
-
-# %%
-time = ds["time"].sum("files")
-
-# %%
-ds = ds.chunk(1).chunk({"files": ds.sizes["files"]})
-time = (
-    time
-    + ds.map_blocks(
-        process_multi_kerchunk,
-        (product["short_name"],),
-        template=time.chunk(1),
-    ).compute()
-)
-
-# %% [markdown]
-# ### Results
-
-# %%
-time.to_netcdf(f'data/{product["short_name"]}-reprocess-{datetime.now()}.nc')
-
-# %%
-time.astype("timedelta64[s]").astype(int).to_dataframe()
-
-# %% [markdown]
-# ## NLDAS
-
-# %% [markdown]
-# ### File List
-
-# %%
-product = {
-    "short_name": "NLDAS_NOAH0125_H",
-    "version": "2.0",
-    "temporal": ("2023-02-01", "2023-02-28"),
+levels = {
+    "rechunk": [1],
+    "repack": [0],
+    "kerchunk": [0],
 }
-results = earthaccess.search_data(**product, count=args.count)
-ds = xr.Dataset(
-    {
-        "time": xr.DataArray(
-            float('nan'),
-            coords=[
-                ("files", results),
-                ("rechunk", [0]),
-                ("repack", [0, 1]),
-                ("kerchunk", [0, 1]),
-            ],
-        ),
-        "page_size": ("rechunk", ["419430"]),
-    }
-)
-ds
+ds = dataset.sel(levels)
+ds = ds.where(~ds["chunk_size"].isnull(), drop=True).chunk(1)
+print("process_rechunk")
+with ProgressBar():
+    ds = ds.map_blocks(process_rechunk, template=ds).compute()
+dataset = xr.merge((dataset, ds), join="outer", compat="no_conflicts")
+
+# %%
+levels = {
+    "repack": [1],
+    "kerchunk": [0],
+}
+ds = dataset.sel(levels).chunk(1)
+print("process_repack")
+with ProgressBar():
+    ds = ds.map_blocks(process_repack, template=ds).compute()
+dataset = xr.merge((dataset, ds), join="outer", compat="no_conflicts")
+
+# %%
+levels = {
+    "kerchunk": [1],
+}
+ds = dataset.sel(levels).chunk(1)
+print("process_single_kerchunk")
+with ProgressBar():
+    ds = ds.map_blocks(process_single_kerchunk, template=ds).compute()
+dataset = xr.merge((dataset, ds), join="outer", compat="no_conflicts")
+ds = dataset.groupby("product").first().sel(levels).chunk(1)
+print("process_multi_kerchunk")
+with ProgressBar():
+    ds = ds.map_blocks(process_multi_kerchunk, template=ds).compute()
+dataset["time_multi_kerchunk"] = ds["time"]
 
 # %% [markdown]
-# ### Execute Reprocessing
-
-# %%
-ds = ds.chunk(1)
-ds = ds.map_blocks(process_get, template=ds).compute()
-
-# %%
-ds = ds.chunk(1)
-ds = ds.map_blocks(process_repack, template=ds).compute()
-
-# %%
-ds = ds.chunk(1)
-ds = ds.map_blocks(process_single_kerchunk, template=ds).compute()
-
-# %%
-time = ds["time"].sum("files")
-
-# %%
-ds = ds.chunk(1).chunk({"files": ds.sizes["files"]})
-time = (
-    time
-    + ds.map_blocks(
-        process_multi_kerchunk,
-        (product["short_name"],),
-        template=time.chunk(1),
-    ).compute()
-)
+# ### View & Save Timing
 
 # %% [markdown]
-# ### Results
+# View the timing results as tables.
 
 # %%
-time.to_netcdf(f'data/{product["short_name"]}-reprocess-{datetime.now()}.nc')
+df = dataset["time_multi_kerchunk"].to_dataframe()
+df.dropna()
 
 # %%
-time.astype("timedelta64[s]").astype(int).to_dataframe()
+df = dataset["time"].to_dataframe()
+df.dropna()
+
+# %% [markdown]
+# Save the dataset with all timing information, but not the `earthdata.search_data` results, to a netCDF file.
+
+# %%
+dataset.drop_vars("results").to_netcdf("reprocess.nc")

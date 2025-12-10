@@ -55,14 +55,12 @@ The `reprocess` script implements cloud optimization strategies:
 Execute file reprocessing on https://openscapes.2i2c.cloud.
 
 ```{code-cell}
-python reprocess.py --help # \
-  # --remote=s3 \
-  # --prefix=$SCRATCH_BUCKET \
-  # --tempdir \
-  # --count=2
+python reprocess.py \
+  --tmpdir \
+  --count "-1"
 ```
 
-Execute file reprocessing on https://oceandata.sci.gsfc.nasa.gov/oceanhub.
+Execute file reprocessing on an HPC.
 
 ```{code-cell}
 python reprocess.py \

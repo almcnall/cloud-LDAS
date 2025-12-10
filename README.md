@@ -6,8 +6,8 @@ Welcome to the article supplement for McNally et al. (submitted), which introduc
 
 ## Repository Overview
 
-The "scripts" folder provides everything needed to reproduce the case study,
-as described in the folder's README.
+The "scripts" folder provides the code needed to reproduce the case study;
+follow the steps described in the folder's README.
 
 The "CONTRIBUTING.md" guide provides instructions for project collaborators,
 or any potential contributors to this repository.
@@ -23,7 +23,7 @@ python -m bash_kernel.install
 ```
 
 With the [Jupytext] extension available in JupyterLab, execution of MyST Markdown code cells is like execution of Notebook code cells.
-The difference is that outputs are note saved in a MyST Markdown file.
+The difference is that outputs are not saved in a MyST Markdown file.
 Open any MyST Markdown as a Notebook (use right-click > "Open With" > "Notebook") to run its code cells.
 
 ## Acknowledgments
