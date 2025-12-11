@@ -95,17 +95,6 @@ storage
 prefix = Path(args.prefix, "cloud_ldas")
 prefix
 
-# %% [markdown]
-# A `TemporaryDirectory()` will be deleted when Python exists, which we don't want
-# while developing.
-
-# %%
-if args.tmpdir:
-    tmpdir = TemporaryDirectory().name
-else:
-    tmpdir = Path("tmp")
-tmpdir
-
 
 # %%
 def storage_path(dataset, **kwargs):
@@ -161,10 +150,16 @@ def process_get(dataset):
         the processing time, with coordinates as for `dataset`
     """
     dst_path = storage_path(dataset)
-    start = datetime.now()
-    paths = earthaccess.download([dataset["results"].item()], tmpdir, show_progress=False)
-    stop = datetime.now()
-    storage.put_file(paths[0], dst_path)
+    with TemporaryDirectory() as tmpdir:
+        tmpdir = tmpdir if args.tmpdir else "tmp"
+        start = datetime.now()
+        paths = earthaccess.download(
+            [dataset["results"].item()],
+            tmpdir,
+            show_progress=False,
+        )
+        stop = datetime.now()
+        storage.put_file(paths[0], dst_path)
     dataset["time"][...] = stop - start
     return dataset
 
@@ -445,24 +440,28 @@ ds = dataset.groupby("product").first().sel(levels).chunk(1)
 print("process_multi_kerchunk")
 with ProgressBar():
     ds = ds.map_blocks(process_multi_kerchunk, template=ds).compute()
+dataset = dataset.rename({"product": "_product"})
 dataset["time_multi_kerchunk"] = ds["time"]
 
 # %% [markdown]
 # ### View & Save Timing
 
 # %% [markdown]
-# View the timing results as tables.
-
-# %%
-df = dataset["time_multi_kerchunk"].to_dataframe()
-df.dropna()
-
-# %%
-df = dataset["time"].to_dataframe()
-df.dropna()
-
-# %% [markdown]
 # Save the dataset with all timing information, but not the `earthdata.search_data` results, to a netCDF file.
 
 # %%
 dataset.drop_vars("results").to_netcdf("reprocess.nc")
+
+# %% [markdown]
+# View the timing results as tables.
+
+# %%
+ds = xr.load_dataset("reprocess.nc")
+
+# %%
+df = ds["time_multi_kerchunk"].to_dataframe()
+df.dropna()
+
+# %%
+df = ds["time"].groupby("_product").mean().to_dataframe()
+df.dropna()

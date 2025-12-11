@@ -28,30 +28,55 @@ import earthaccess
 import xarray as xr
 
 # %%
-exp_dims = ("rechunk", "repack", "kerchunk")
+# FIXME: core code
+
+# %%
+in_cloud = "SCRATCH_BUCKET" in os.environ
+in_cloud
 
 # %%
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--remote",
-    default="s3" if "SCRATCH_BUCKET" in os.environ else "local",
-    help="the type of filesystem used to store the original and reprocessed files",
+    default="s3" if in_cloud else "local",
+    help="type of storage used for reprocessed files and copies of the original",
 )
 parser.add_argument(
     "--prefix",
-    default=os.environ.get("SCRATCH_BUCKET", "data"),
-    help="the [bucket and] prefix to prepend to 'cloud_ldas' for remote storage",
+    default=os.environ["SCRATCH_BUCKET"].removeprefix("s3://") if in_cloud else "data",
+    help="the prefix to prepend to 'cloud_ldas' for remote storage",
+)
+parser.add_argument(
+    "--tmpdir",
+    default=in_cloud,
+    action="store_true",
+    help="whether to use a transient temporary directory for downloads (original files)",
+)
+parser.add_argument(
+    "--count",
+    default=2,
+    help="the number of files to reprocess, use '-1' for all",
 )
 args, _ = parser.parse_known_args()
+args
 
 # %%
 if args.remote == "local":
     storage = fsspec.filesystem(args.remote, auto_mkdir=True)
 else:
     storage = fsspec.filesystem(args.remote)
+storage
 
 # %%
-prefix = Path(args.prefix.removeprefix(f"{args.remote}://"), "cloud_ldas")
+prefix = Path(args.prefix, "cloud_ldas")
+prefix
+
+# %% [markdown]
+# ## Read Reprocess data
+
+# %%
+dataset = xr.open_dataset("reprocess.nc")
+dataset
 
 
 # %%

@@ -16,7 +16,7 @@ kernelspec:
 
 +++
 
-As noted in the README, this guide is [MyST Markdown], with cells you can run interatively using the bash kernel when the [Jupytext] extension is available.
+As noted in the README, this guide is [MyST Markdown], with cells you can run interactively using the bash kernel when the [Jupytext] extension is available.
 
 [MyST Markdown]: https://mystmd.org/
 [Jupytext]: https://jupytext.readthedocs.io/
@@ -51,9 +51,9 @@ Neither this new environment nor the kernelspec modification will persist betwee
 The code repository does not store Jupyter notebooks (extension ".ipynb").
 Instead, we store Python scripts (extension ".py") that the [Jupytext] extension keeps automatically synced with notebooks.
 Those scripts are what we run "operationally" (i.e. to reprocess files and perform benchmarking).
-While developing, however, we prefer to use notebooks.
+While developing, however, we prefer to use Jupyter notebooks.
 
-To initialize the .ipynb notebooks after a cloning this repo, or when pulling a new script, run the cell below to sync manually.
+To initialize the Jupyter notebooks after a cloning this repo, or when pulling a new script, run the cell below to sync manually.
 When working in JupyterLab, Jupytext performs synchronization on save and on opening a paired notebook.
 
 [Jupytext]: https://jupytext.readthedocs.io/
