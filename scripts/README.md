@@ -55,15 +55,13 @@ The `reprocess` script implements cloud optimization strategies:
 Execute file reprocessing on https://openscapes.2i2c.cloud, using "~28 GB RAM, ~4 CPUs"
 
 ```{code-cell}
-python reprocess.py --count "-1"
+python reprocess.py --count=-1
 ```
 
 Execute file reprocessing on an HPC.
 
 ```{code-cell}
-python reprocess.py \
-  --prefix=/mnt/mfs/${USER}
-  --count=-1
+python reprocess.py --storage=/mnt/mfs/${USER} --count=-1
 ```
 
 ## (WIP) Benchmark Zonal Statistics against Local Storage

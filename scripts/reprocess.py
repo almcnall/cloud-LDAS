@@ -19,13 +19,12 @@
 # ## Setup
 
 # %%
-import os
-import argparse
+import sys
 import subprocess
 from datetime import datetime, timedelta
-from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
+# %%
 import earthaccess
 import fsspec
 import xarray as xr
@@ -35,98 +34,15 @@ from kerchunk.combine import MultiZarrToZarr
 from kerchunk.hdf import SingleHdf5ToZarr
 from msgspec import json
 
-# %% [markdown]
-# ### Command Line Arguments
-
-# %% [markdown]
-# Operational values can be supplied as needed when running the scripts (see "scripts/README.md").
-#
-# Default settings are intended for development and testing,
-# and depend on the existence of the `SCRATCH_BUCKET` environment variable,
-# which is defined on the 2i2c JupyterHub and probably not defined locally.
+# %%
+sys.path.append("../scripts")
 
 # %%
-in_cloud = "SCRATCH_BUCKET" in os.environ
-in_cloud
-
-# %%
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "--remote",
-    default="s3" if in_cloud else "local",
-    help="type of storage used for reprocessed files and copies of the original",
-)
-parser.add_argument(
-    "--prefix",
-    default=os.environ["SCRATCH_BUCKET"].removeprefix("s3://") if in_cloud else "data",
-    help="the prefix to prepend to 'cloud_ldas' for remote storage",
-)
-parser.add_argument(
-    "--tmpdir",
-    default=in_cloud,
-    action="store_true",
-    help="whether to use a transient temporary directory for downloads (original files)",
-)
-parser.add_argument(
-    "--count",
-    default=2,
-    help="the number of files to reprocess, use '-1' for all",
-)
-args, _ = parser.parse_known_args()
-args
-
-# %% [markdown]
-# ### File handling
-
-# %% [markdown]
-# Make an `fsspec.filesystem` for storage, depending on the `remote` argument.
-
-# %%
-if args.remote == "local":
-    storage = fsspec.filesystem(args.remote, auto_mkdir=True)
-else:
-    storage = fsspec.filesystem(args.remote)
-storage
-
-# %% [markdown]
-# Set a path to use as the root of the `storage` filesystem, based on the `prefix` argument.
-
-# %%
-prefix = Path(args.prefix, "cloud_ldas")
-prefix
-
-
-# %%
-def storage_path(dataset, **kwargs):
-    """Build a path, starting from `prefix`, for outputs.
-
-    The array, which must have a size of one, will also have coordinates used to
-    construct the output path for the processed granule. The resulting path looks
-    like "prefix/<product>/<rechunk>/<repack>/<kerchunk>/<file>".
-
-    Parameters
-    ----------
-    dataset : xarray.Dataset
-        the size-one chunk of the dataset used to distribute processing
-    kwargs
-        override the array's coordinate value for the given keyword
-
-    Returns
-    -------
-    str
-        a absolute path to use for storage of outputs
-    """
-    path = prefix
-    for item in ("product", "rechunk", "repack", "kerchunk", "file"):
-        index = kwargs.get(item)
-        if index is None:
-            index = dataset[item].item()
-        path = path / str(index)
-    return path
+from core import args, storage, storage_path
 
 
 # %% [markdown]
-# ### Reprocessing Functions
+# ## Functions
 
 # %% [markdown]
 # #### get
@@ -298,11 +214,11 @@ def process_multi_kerchunk(dataset):
     start = datetime.now()
     reference = MultiZarrToZarr(
         [json.decode(storage.cat(i)) for i in src_path],
-        remote_protocol=args.remote,
+        remote_protocol=storage.protocol[0],
         concat_dims="time",
     )
     reference = reference.translate()
-    with storage.open(dst_path, "wb") as dst:
+    with storage.open(dst_path.with_suffix(".json"), "wb") as dst:
         dst.write(json.encode(reference))
     stop = datetime.now()
     dataset["time"][...] = stop - start
@@ -459,9 +375,9 @@ dataset.drop_vars("results").to_netcdf("reprocess.nc")
 ds = xr.load_dataset("reprocess.nc")
 
 # %%
-df = ds["time_multi_kerchunk"].to_dataframe()
+df = ds["time"].rename({"_product": "product"}).groupby("product").mean().to_dataframe()
 df.dropna()
 
 # %%
-df = ds["time"].groupby("_product").mean().to_dataframe()
+df = ds["time_multi_kerchunk"].to_dataframe()
 df.dropna()
