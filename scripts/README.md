@@ -14,8 +14,6 @@ kernelspec:
 
 # scripts/README
 
-+++
-
 As noted in the README, this guide is [MyST Markdown], with cells you can run interatively using the bash kernel when the [Jupytext] extension is available.
 
 To reproduce the published results, follow the [](#setup) instructions,
@@ -23,8 +21,6 @@ and then run cells below (as needed) within the same session using the activated
 
 [MyST Markdown]: https://mystmd.org/
 [Jupytext]: https://jupytext.readthedocs.io/
-
-+++
 
 ## Setup
 
@@ -42,15 +38,11 @@ conda activate workspace
 
 ## (WIP) Reprocess Earthdata Cloud Granules
 
-+++
-
 The `reprocess` script implements cloud optimization strategies:
 
 - Enlarge "chunks" to a size better for cloud object stores
 - Move the internal data on file structure into distinct "pages"
 - Copy the internal data on file structure to external "sidecar" files
-
-+++
 
 Execute file reprocessing on https://openscapes.2i2c.cloud, using "~28 GB RAM, ~4 CPUs"
 
@@ -65,8 +57,6 @@ python reprocess.py --storage=/mnt/mfs/${USER} --count=-1
 ```
 
 ## (WIP) Benchmark Zonal Statistics against Local Storage
-
-+++
 
 The `benchmark` script opens original and reprocessed files to calculate a zonal statistic.
 
