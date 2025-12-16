@@ -13,25 +13,53 @@
 # ---
 
 # %% [markdown]
-# # Performance for Spatial Means
+# # Time Data Access for Spatial Averaging
 
 # %% [markdown]
 # ## Setup
 
 # %%
-import sys
+import os
+del os.environ["PROJ_DATA"]
+
+# %%
 from datetime import datetime
 
-# %%
+from dask.diagnostics import ProgressBar
 import earthaccess
+import geopandas as gpd
+import rasterio.features
+import rioxarray
 import xarray as xr
 
-# %%
-sys.path.append("../scripts")
-
-# %%
 from core import args, prefix, storage, storage_path
 
+# %%
+pbar = ProgressBar()
+pbar.register()
+
+# %%
+url = "https://services5.arcgis.com/sjP4Ugu5s0dZWLjd/arcgis/rest/services/Afghanistan_water_basin_boundaries/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson"
+geom = gpd.read_file(url)
+geom
+
+# %%
+paths = storage.find(prefix / "FLDAS_NOAHMP001_G_CA_D")
+with storage.open(paths[0]) as f:
+    coords = xr.open_dataset(f).coords
+list(coords)
+
+# %%
+epsg = 4087
+basins = xr.DataArray(0, [coords["lat"], coords["lon"]], name="OBJECTID")
+basins = basins.rio.write_crs(epsg)
+basins[...] = rasterio.features.rasterize(
+    geom[["geometry", "OBJECTID"]].itertuples(index=False),
+    out_shape=basins.rio.shape,
+    transform=basins.rio.transform(),
+)
+basins = basins.where(basins > 0)
+#im = basins.plot.imshow()
 
 # %% [markdown]
 # ## Functions
@@ -101,8 +129,9 @@ def time_area_mean(dataset):
 # %%
 def time_zonal_mean(dataset):
 
+    dataset = dataset.rio.write_crs(4087)
     start = datetime.now()
-    ds
+    ds = dataset["SWE_inst"].groupby(basins).mean().compute()
     stop = datetime.now()
     
     return stop - start, ds
@@ -125,16 +154,13 @@ array[...] = float('nan')
 array
 
 # %% [markdown]
-# ## Run benchmarks
+# ## Run benchmarking
 
 # %%
 time_open = []
 time_calc = []
 for item in array:
-    if item["product"] == "FLDAS_NOAHMP001_G_CA_D":
-        # TODO: zonal mean for FLDAS
-        continue
-
+    
     # open all times as a single dataset
     if item["kerchunk"] == 0:
         time_mfdataset = time_mfdataset_steps(item)
@@ -170,10 +196,8 @@ dataset.to_netcdf("benchmark.nc")
 # ## Display Results
 
 # %%
-ds = xr.open_dataset("benchmark.nc")
-ds.to_dataframe()
-
-# %% [markdown]
-# ## Scratch
+df = xr.open_dataset("benchmark.nc").to_dataframe()
+df["time_calc"].dropna().dt.total_seconds().reset_index()
 
 # %%
+df["time_open"].dropna().dt.total_seconds().reset_index()

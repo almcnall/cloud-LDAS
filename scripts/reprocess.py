@@ -19,25 +19,19 @@
 # ## Setup
 
 # %%
-import sys
-import subprocess
 from datetime import datetime, timedelta
 from tempfile import NamedTemporaryFile, TemporaryDirectory
+import subprocess
 
-# %%
-import earthaccess
-import fsspec
-import xarray as xr
-import requests
 from dask.diagnostics import ProgressBar
 from kerchunk.combine import MultiZarrToZarr
 from kerchunk.hdf import SingleHdf5ToZarr
 from msgspec import json
+import earthaccess
+import fsspec
+import xarray as xr
+import requests
 
-# %%
-sys.path.append("../scripts")
-
-# %%
 from core import args, storage, storage_path
 
 
@@ -360,7 +354,7 @@ dataset = dataset.rename({"product": "_product"})
 dataset["time_multi_kerchunk"] = ds["time"]
 
 # %% [markdown]
-# ### View & Save Timing
+# ### Save Timing
 
 # %% [markdown]
 # Save the dataset with all timing information, but not the `earthdata.search_data` results, to a netCDF file.
@@ -369,6 +363,8 @@ dataset["time_multi_kerchunk"] = ds["time"]
 dataset.drop_vars("results").to_netcdf("reprocess.nc")
 
 # %% [markdown]
+# ## Display Results
+#
 # View the timing results as tables.
 
 # %%
@@ -376,8 +372,8 @@ ds = xr.load_dataset("reprocess.nc")
 
 # %%
 df = ds["time"].rename({"_product": "product"}).groupby("product").mean().to_dataframe()
-df.dropna()
+df["time"].dropna().dt.total_seconds().reset_index()
 
 # %%
 df = ds["time_multi_kerchunk"].to_dataframe()
-df.dropna()
+df["time_multi_kerchunk"].dropna().dt.total_seconds().reset_index()

@@ -4,12 +4,14 @@ dependencies:
   - dask
   - earthaccess
   - fsspec
+  - geopandas
   - h5netcdf
   - ipykernel
   - ipywidgets
   - kerchunk
   - libnetcdf
   - msgspec
+  - rioxarray
   - xarray
 platforms:
   - linux-64

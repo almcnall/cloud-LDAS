@@ -22,19 +22,23 @@ As noted in the README, this guide is [MyST Markdown], with cells you can run in
 ## Setup
 
 Create a "workspace" environment and point the "python3" kernelspec at the new environment.
-Note that [scripts/README](scripts/README.md) includes similar setup instructions for the purpose of reproducing results only.
+Note that [scripts/README](scripts/README.md) includes similar setup instructions for the purpose of reproducing results only, which does not require modifying any kernelspec.
+Neither this new environment nor the kernelspec modification will persist between JupyterLab servers.
+
+The first step is to create a Conda environment from the explicit requirements in `conda-lock.yml` (i.e. there is no solve and versions are "locked").
 
 ```{code-cell}
 conda-lock install --name workspace conda-lock.yml
 ```
 
-In the next step, a `WARNING` that says the "kernelspec may not be found" is possible.
+The second step is to make the environment accessible from Jupyter, which can be tricky on a hosted JupyterHub.
+Here, we overwrite an existing (and therefore visible) kernelspec, which does trigger a spurious `WARNING` that the "kernelspec may not be found".
+In this step we also adjust the kernel's `PYTHONPATH` environment variable to allow `import core` to find the `scripts` folder.
 
 ```{code-cell}
-conda run --name workspace python -m ipykernel install --prefix="$CONDA_PREFIX"
+conda run --name workspace \
+  python -m ipykernel install --prefix="$CONDA_PREFIX" --env PYTHONPATH "$PWD/scripts"
 ```
-
-Neither this new environment nor the kernelspec modification will persist between JupyterLab servers.
 
 ### Develop in Notebooks
 

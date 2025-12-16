@@ -36,7 +36,7 @@ eval "$(conda shell.bash hook)"
 conda activate workspace
 ```
 
-## (WIP) Reprocess Earthdata Cloud Granules
+## Reprocess FLDAS and NLDAS for Object Stores
 
 The `reprocess` script implements cloud optimization strategies:
 
@@ -44,26 +44,30 @@ The `reprocess` script implements cloud optimization strategies:
 - Move the internal data on file structure into distinct "pages"
 - Copy the internal data on file structure to external "sidecar" files
 
-Execute file reprocessing on https://openscapes.2i2c.cloud, using "~28 GB RAM, ~4 CPUs"
+Execute file reprocessing on openscapes.2i2c.cloud, using "~28 GB RAM, ~4 CPUs"
 
 ```{code-cell}
 python reprocess.py --count=-1
 ```
 
-Execute file reprocessing on an HPC.
+Execute file reprocessing on an HPC using filesystem storage.
 
 ```{code-cell}
 python reprocess.py --storage=/mnt/mfs/${USER} --count=-1
 ```
 
-## (WIP) Benchmark Zonal Statistics against Local Storage
+## Time Data Access for Spatial Averaging
 
-The `benchmark` script opens original and reprocessed files to calculate a zonal statistic.
+The `benchmark` script opens all files to calculate a time series of spatial averages.
+
+Execute benchmarking on openscapes.2i2c.cloud, using "~15 GB RAM, ~1.8 CPUs".
 
 ```{code-cell}
-python benchmark.py --help # \
-  # --remote=s3 \
-  # --prefix=$SCRATCH_BUCKET \
-  # --tempdir \
-  # --count=2
+python benchmark.py --count=-1
+```
+
+Execute benchmarking on an HPC using filesystem storage.
+
+```{code-cell}
+python benchmark.py --storage=/mnt/mfs/${USER} --count=-1
 ```

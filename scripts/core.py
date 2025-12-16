@@ -74,7 +74,7 @@ storage
 
 # %%
 prefix = pathlib.Path(prefix)
-if args.count >= -1:
+if int(args.count) > -1:
     prefix = prefix / str(args.count)
 prefix
 
