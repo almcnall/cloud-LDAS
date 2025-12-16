@@ -5,11 +5,11 @@ jupytext:
     extension: .md
     format_name: myst
     format_version: 0.13
-    jupytext_version: 1.17.3
+    jupytext_version: 1.16.0
 kernelspec:
-  name: bash
   display_name: Bash
   language: bash
+  name: bash
 ---
 
 # Contributing Guide
@@ -23,21 +23,29 @@ As noted in the README, this guide is [MyST Markdown], with cells you can run in
 
 Create a "workspace" environment and point the "python3" kernelspec at the new environment.
 Note that [scripts/README](scripts/README.md) includes similar setup instructions for the purpose of reproducing results only, which does not require modifying any kernelspec.
-Neither this new environment nor the kernelspec modification will persist between JupyterLab servers.
+The new environment and the kernelspec modification may or may not persist between JupyterLab servers, depending on the platform and options below.
 
-The first step is to create a Conda environment from the explicit requirements in `conda-lock.yml` (i.e. there is no solve and versions are "locked").
+The first step is to create a Conda environment from `conda-lock.yml`, a requirements file with explicit versions that does not trigger dependency resolution.
 
 ```{code-cell}
 conda-lock install --name workspace conda-lock.yml
 ```
 
 The second step is to make the environment accessible from Jupyter, which can be tricky on a hosted JupyterHub.
-Here, we overwrite an existing (and therefore visible) kernelspec, which does trigger a spurious `WARNING` that the "kernelspec may not be found".
-In this step we also adjust the kernel's `PYTHONPATH` environment variable to allow `import core` to find the `scripts` folder.
+One way is to overwrite an existing (and therefore visible) kernelspec, which does trigger a spurious `WARNING` that the "kernelspec may not be found".
+The other way is to add a `--user` kernelspec.
+We also adjust the kernel's `PYTHONPATH` environment variable to allow `import core` to find the `scripts` folder.
 
 ```{code-cell}
 conda run --name workspace \
   python -m ipykernel install --prefix="$CONDA_PREFIX" --env PYTHONPATH "$PWD/scripts"
+```
+
+OR
+
+```{code-cell}
+conda run --name workspace \
+  python -m ipykernel install --user --env PYTHONPATH "$PWD/scripts"
 ```
 
 ### Develop in Notebooks

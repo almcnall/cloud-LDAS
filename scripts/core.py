@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.17.3
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -73,11 +73,14 @@ storage, prefix = fsspec.core.url_to_fs(args.remote)  # TODO: auto_mkdir if loca
 storage
 
 # %%
+if hasattr(storage, "auto_mkdir"):
+    storage.auto_mkdir = True
+
+# %%
 prefix = pathlib.Path(prefix)
 if int(args.count) > -1:
     prefix = prefix / str(args.count)
 prefix
-
 
 # %%
 def storage_path(dataset, **kwargs):

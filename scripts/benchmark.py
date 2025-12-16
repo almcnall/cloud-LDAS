@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.17.3
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -20,7 +20,10 @@
 
 # %%
 import os
-del os.environ["PROJ_DATA"]
+try:
+    del os.environ["PROJ_DATA"]
+except KeyError:
+    pass
 
 # %%
 from datetime import datetime
@@ -120,7 +123,11 @@ def time_area_mean(dataset):
         "lat": slice(32, 37),
         "lon": slice(-100, -95),
     })
-    ds = ds[["Rainf"]].mean(["lat", "lon"]).compute()
+    ds = (
+        ds[["Rainf"]]
+        .mean(["lat", "lon"])
+        .compute(scheduler="threads", num_workers=2)
+    )
     stop = datetime.now()
     
     return stop - start, ds
@@ -131,7 +138,12 @@ def time_zonal_mean(dataset):
 
     dataset = dataset.rio.write_crs(4087)
     start = datetime.now()
-    ds = dataset["SWE_inst"].groupby(basins).mean().compute()
+    ds = (
+        dataset["SWE_inst"]
+        .groupby(basins)
+        .mean()
+        .compute(scheduler="threads", num_workers=2)
+    )
     stop = datetime.now()
     
     return stop - start, ds
@@ -197,7 +209,9 @@ dataset.to_netcdf("benchmark.nc")
 
 # %%
 df = xr.open_dataset("benchmark.nc").to_dataframe()
-df["time_calc"].dropna().dt.total_seconds().reset_index()
 
 # %%
 df["time_open"].dropna().dt.total_seconds().reset_index()
+
+# %%
+df["time_calc"].dropna().dt.total_seconds().reset_index()
