@@ -6,19 +6,19 @@ Welcome to the article supplement for McNally et al. (submitted), which introduc
 
 ## Repository Overview
 
-The "scripts" folder provides the code needed to reproduce the case study;
+The [scripts](scripts/) folder provides the code needed to reproduce the case study;
 follow the steps described in the folder's README.
 
-The "CONTRIBUTING.md" guide provides instructions for project collaborators,
+The [CONTRIBUTING.md](CONTRIBUTING.md) guide provides instructions for project collaborators,
 or any potential contributors to this repository.
 It includes documentation on developing and testing in Jupyter notebooks.
 
-The README in "scripts" and the contributing guide are executable [MyST Markdown] documents,
+Both [scripts/README.md](scripts/README.md) and the contributing guide are executable [MyST Markdown] documents,
 with bash as the designated kernel.
 If not already available, install this light-weight kernel and kernelspec in your user directory as follows.
 
 ```shell
-pip install --user bash_kernel
+python -m pip install --user bash_kernel
 python -m bash_kernel.install
 ```
 
