@@ -17,9 +17,9 @@ preferred-citation:
       given-names: Lucas
     - family-names: Carroll
       given-names: Ian
-# TODO  year:
+  year: 2026
   title: "Producing Earth Science Data for Impact: Improved Commercial Cloud Usability of Archive Model Data"
   journal: Environmental Modelling & Software
-# TODO  volume:
-# TODO  issue:
-# TODO  doi:
+  doi: https://doi.org/10.1016/j.envsoft.2025.106846
+  # TODO  volume:
+  # TODO  issue:
